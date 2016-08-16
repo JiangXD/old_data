@@ -1,0 +1,276 @@
+---
+title: "数据分析"
+subtitle: "Fixation Analysis & Summary"
+author: "姜晓东"
+date: "`r Sys.Date()`"
+
+output:
+    beamer_presentation:
+        slide_level: 2
+        theme: CambridgeUS
+        keep_tex: no
+        pandoc_args: --latex-engine=xelatex
+        includes:
+            in_header: header.tex
+    md_document:
+         variant: markdown_github
+---
+
+##目录
+\tableofcontents
+
+## 数据来源
+
+分析数据来自22~126文件，所有数据汇总到allData26to126.csv文件中。
+
+以前对旧数据的提取率比较低，这次基本都能打开提取了，所以请保存这次这个csv文件。
+
+对于后续数据，我计划开发MatLab脚本，对新的数据日常导出csv。
+
+所有的统计分析都基于上述Excel csv文件。
+
+# Fixation Analysis
+
+## Fixation 定义
+
+对于一个典型的Saccade，Events循环如下：
+
+$$ 1/24 \to {\color{blue} 3 \to  6 \to } {\color{red} 7 \to 8/9 \to 26 \to 3 } \to 25 $$
+
+红色为眼动部分；
+
+蓝色为Fixation部分（从进入Fix Windown （Event 3）到开始眼动（Event 7）之间）。
+
+## Fixation 分布
+```{r echo=FALSE, fig.height=6, fig.width=9} 
+library(ggplot2);
+allData=read.csv("allData_22to126.csv");
+allData=subset(allData, fixation>0);
+
+pic=ggplot(data=allData) + geom_point(aes(x=m_index, y=fixation, color=(V2==2)), size=0.2, shape=16, alpha=0.6) +
+                           facet_wrap(~window, ncol=4) +
+                           scale_color_manual(values=c("red","blue"), guide=FALSE) +
+                           xlab("Trials") + ylab("Fixation (ms)") +
+                           theme(legend.position='right',
+                                       axis.text = element_text(size=rel(0.5))); 
+
+print(pic);
+
+```
+
+ \tiny {\color{blue} 蓝色的点是小于700ms的Broken Fixation，似乎感觉这些点逐渐被吸引到700~900的区间了，增加了那个区间的密度。}
+
+
+## 小于700ms区间与700～900区间数据点数量对比
+```{r, echo=FALSE}
+library(plyr);
+
+tmp=ddply(allData, .(window), function(x){
+       with(x,data.frame(
+           a=length(which(fixation < 700)),
+           b=length(which(fixation >700 & fixation <900)),
+           c=length(which(fixation >700))
+       ))
+});
+
+tmp$d=with(tmp, a/b);
+tmp$e=with(tmp, a/c);
+
+names(tmp)[2:6]=c("<700(a)", "700~900(b)", ">700(c)", "a/b", "a/c");
+
+tmp[,2:6]
+
+```
+
+# 旧数据Summary
+
+## 成功率
+
+```{r, echo=FALSE}
+tmp=ddply(allData, .(fileID), function(x){
+      with(x, data.frame(
+          vis_total=length(which(V6==1 & V7==1)),
+          vis_succ=length(which(V6==1 & V7==4 & V2==0)),
+          mem_total=length(which(V6==2 & V7==1)),
+          mem_succ=length(which(V6==2 & V7==4 & V2==0))
+      ))
+});
+
+tmp$vis=with(tmp, vis_succ/vis_total);
+tmp$mem=with(tmp, mem_succ/mem_total);
+
+mylen=length(tmp[,1]);
+
+
+tmp2=data.frame(File_ID=rep(tmp$fileID, 2), 
+                Correct_Rate=c(tmp$vis, tmp$mem),
+                Label=c(rep("vis",mylen), rep("mem", mylen)));
+
+tmp2[is.nan(tmp2$Correct_Rate),]$Correct_Rate=0;
+
+ggplot(data=tmp2, aes(x=File_ID, y=Correct_Rate, group=Label, color=Label, fill=Label)) + 
+        geom_point() + geom_smooth();               
+
+```
+
+
+## 成功率
+
+\small {\color{blue} 其中有几个文件的vis和mem的成功率是0:  }
+```{r}
+subset(tmp, vis_succ==0 & mem_succ==0)
+
+```
+
+ \small {\color{blue} 把它们去掉再画图  }
+
+
+## 成功率
+
+```{r, echo=FALSE}
+tmp2=subset(tmp2, Correct_Rate>0);
+
+ggplot(data=tmp2, aes(x=File_ID, y=Correct_Rate, group=Label, color=Label, fill=Label)) + 
+        geom_point() + geom_smooth();  
+
+```
+
+去掉0成功率点的图。
+
+
+## 失败分析
+```{r echo=FALSE}
+total_sacc=length(allData[,1]);
+total_errors=with(allData, length(which(V2!=0)));
+
+```
+
+失败Saccades为`r total_errors`个，占总数的`r total_errors*100/total_sacc`%。
+
+失败分布如下：
+
+```{r echo=FALSE}
+tmp=ddply(allData, .(window), function(x){
+    Err_Count=with(x, length(which(V2!=0)))
+});
+
+tmp
+
+```
+
+
+## Latency 分布
+
+```{r echo=FALSE}
+allData=subset(allData, full==1);
+
+pic=ggplot(data=allData) + geom_point(aes(x=m_index, y=latency, color=rewards), size=0.2, shape=16, alpha=0.6) +
+                           facet_wrap(~window, ncol=4) +
+                           xlab("Trials") + ylab("Latency (ms)") +
+                           scale_color_gradient(low="yellow", high="red") +
+                           theme(legend.position='right'); 
+
+print(pic);
+
+```
+
+## Duration 分布
+
+
+```{r echo=FALSE}
+pic=ggplot(data=allData) + geom_point(aes(x=m_index, y=duration, color=rewards), size=0.2, shape=16, alpha=0.6) +
+                           facet_wrap(~window, ncol=4) +
+                           xlab("Trials") + ylab("Duration (ms)") +
+                           scale_color_gradient(low="yellow", high="red") +
+                           theme(legend.position='right');
+print(pic);
+
+```
+
+
+## Interval 分布
+
+```{r echo=FALSE}
+allData2=subset(allData, window>1);
+pic=ggplot(data=allData2) + geom_point(aes(x=m_index, y=interval, color=rewards), size=0.2, shape=16, alpha=0.6) +
+                           facet_wrap(~window, ncol=4) +
+                           xlab("Trials") + ylab("Interval (ms)") +
+                           scale_color_gradient(low="yellow", high="red") +
+                           theme(legend.position='right');
+print(pic);
+```
+
+
+## Latency vs Duration
+
+
+
+```{r echo=FALSE}
+pic=ggplot(data=allData) + geom_point(aes(x=latency, y=duration, color=rewards), size=0.2, shape=16, alpha=0.6) +
+                           geom_smooth(aes(x=latency, y=duration), method="rlm") +
+                           facet_wrap(~window, ncol=4) +
+                           xlab("Latency (ms)") + ylab("Duration (ms)") +
+                           scale_color_gradient(low="yellow", high="red") +
+                           theme(legend.position='right');
+
+print(pic);
+```
+
+ \tiny {\color{blue} 蓝色的的线是回归线，采用保守的稳健回归，除了5号窗口外，都有统计学意义。}
+
+
+## Latency vs Duration
+
+```{r echo=FALSE}
+pic=ggplot(data=allData) + geom_point(aes(x=latency, y=duration, color=rewards), size=0.2, shape=16, alpha=0.6) +
+                           geom_smooth(aes(x=latency, y=duration), method="rlm") +
+                           geom_smooth(aes(x=latency, y=duration), method="lm", col="red") +
+                           facet_wrap(~window, ncol=4) +
+                           xlab("Latency (ms)") + ylab("Duration (ms)") +
+                           scale_color_gradient(low="yellow", high="red") +
+                           theme(legend.position='right');
+
+print(pic);
+```
+
+\tiny {\color{blue} 红色的的线是普通线性回归线，都有统计学意义。}
+
+
+## Fixation vs Duration
+
+```{r echo=FALSE}
+pic=ggplot(data=allData) + geom_point(aes(x=fixation, y=duration, color=rewards), size=0.2, shape=16, alpha=0.6) +
+                           geom_smooth(aes(x=fixation, y=duration), method="rlm") +
+                           facet_wrap(~window, ncol=4) +
+                           xlab("Fixation (ms)") + ylab("Duration (ms)") +
+                           scale_color_gradient(low="yellow", high="red") +
+                           theme(legend.position='right');
+
+print(pic);
+```
+
+## Latency vs Fixation
+
+```{r echo=FALSE}
+pic=ggplot(data=allData) + geom_point(aes(x=latency, y=fixation, color=rewards), size=0.2, shape=16, alpha=0.6) +
+                           facet_wrap(~window, ncol=4) +
+                           xlab("Latency (ms)") + ylab("Fixation (ms)") +
+                           scale_color_gradient(low="yellow", high="red") +
+                           theme(legend.position='right');
+
+print(pic);
+```
+
+
+
+## 关于本文档
+
+所有代码在 https://github.com/JiangXD/old_data , 方便查看。
+
+generate_logs.R 用于生成Log文件；
+
+extract_Data_from_HTB.R 用于提取数据，存入到allData_22to126.csv文件中；
+
+数据分析*.Rmd 利用上述csv文件，统计绘图并生成pdf展示文件。
+
+ 
